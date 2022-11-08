@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+      <meta charset="UTF-8">
+      <title>Just Chatting</title>
+      <link rel="stylesheet" type="text/css" href="./style.css">
+      <script src="/socket.io/socket.io.js"></script>
+      
+      <script src = "https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+      <script>
+      const socketio = io.connect();
+
+      let invRoom = ""
+      //used to accept private invite from the user
+      function acceptInvite(room){
+         
+       
+         socketio.emit("join_room_to_server_with_inv", {name:room})
+         document.querySelector("#invitation").style.display = "none"
+      }
+      function declineInvite(){
+         document.querySelector("#invitation").style.display = "none"
+      }
+      //show public rooms to client
+      socketio.on("send_rooms_to_client", data => {
+         let rooms = data.rooms;
+
+         while (document.getElementById("roomlist").firstChild) {
+            document.getElementById("roomlist").removeChild(document.getElementById("roomlist").firstChild);
+                }
+
+         for (const [key, value] of Object.entries(rooms)) {
+            if(!value['isPrivate']){
+               let newRoom = document.createElement("button");
+
+               newRoom.appendChild(document.createTextNode(key))
+
+               newRoom.addEventListener("click", e => {
+                  joinRoom(e.target.value)
+               })
+               newRoom.setAttribute("value", key)
+
+               document.getElementById("roomlist").appendChild(newRoom);
+            }
+            
+         }
+      })
+      //show the user's nickname to the user
+      socketio.on("show_nickname_to_client", (data)=>{
+         document.querySelector("#nickname").innerHTML = "Nickname : " + data.nickname
+      })
+      //show currently joined room to the user
+      socketio.on("show_joined_room_name_to_client", (data)=>{
+         document.querySelector("#joined_room_name").innerHTML = "Rooms Joined : " + data.room_name
+      })
+      //shows chat messages to the member of the room
+      socketio.on("message_to_client",function(data) {
+         console.log(data)
+         //Append an HR thematic break and the escaped HTML of the new message
+         document.getElementById("chatlog").appendChild(document.createElement("hr"));
+         document.getElementById("chatlog").appendChild(document.createTextNode(data['message']));
+      });
+      //sends private message to the user
+      socketio.on("private_message_to_client", (data)=>{
+         if (data.is_sender){
+            document.getElementById("chatlog").appendChild(document.createElement("hr"));
+         document.getElementById("chatlog").appendChild(document.createTextNode("[PRIVATE] To " + data['receiver'] + ": " + data['message']));
+         return
+         }
+         document.getElementById("chatlog").appendChild(document.createElement("hr"));
+         document.getElementById("chatlog").appendChild(document.createTextNode("[PRIVATE] From " + data['sender'] + ": " + data['message']));
+      })
+      //pops up invitation message to the invitee
+      socketio.on("private_invitation_to_client", (data)=>{
+         invName = data.room
+         document.querySelector("#invitation").innerHTML = data.sender+" has sent an invitation to room " + data.room + "!"
+         document.querySelector("#invitation").style.display = "block"
+         
+         let btn = document.createElement('span');
+         btn.innerHTML = "Accept"
+         btn.setAttribute("class", "acceptBtn")
+
+         btn.addEventListener("click", (e)=>{
+            acceptInvite(data.room)
+         })
+
+         let declineBtn = document.createElement('span');
+         declineBtn.innerHTML = "Decline"
+         declineBtn.setAttribute("class", "acceptBtn")
+
+         declineBtn.addEventListener("click", (e)=>{
+            declineInvite()
+         })
+
+         document.querySelector("#invitation").appendChild(btn)
+         document.querySelector("#invitation").appendChild(declineBtn)
+         document.querySelector("#invitation").style.display = "block"
+
+         //document.getElementById("acceptBtn").style.display = "block"
+         
+       
+      })
+     
+      
+     
+     
+      //shows newly created rooms to the public
+      socketio.on("show_rooms_to_client", function(data) {
+
+         if (data['isNew']) {
+            let newRoom = document.createElement("button");
+
+            newRoom.appendChild(document.createTextNode(data['roomname']))
+
+            newRoom.addEventListener("click", e => {
+               joinRoom(e.target.value)
+            })
+            newRoom.setAttribute("value", data['roomname'])
+
+            document.getElementById("roomlist").appendChild(newRoom);
+         }
+
+         const chatLog = document.getElementById("chatlog")
+
+         while (chatLog.firstChild) {
+            chatLog.removeChild(chatLog.firstChild);
+         }
+      })
+      //error handler, alerts accordingly
+      socketio.on("send_error_message", (e)=>{
+         if(e === 0){
+            window.alert("wrong password!")
+            return
+         }
+         if(e === 1){
+            window.alert("You are not in a same room with that user!")
+            return
+         }
+   
+         if (e === 2){
+            window.alert("ur banned!")
+            return
+         }
+         if (e === 3){
+            window.alert("not the owner of the room")
+            return
+         }
+         if(e === 4){
+            window.alert("Duplicate Room Name!")
+            return
+         }
+         if(e === 5){
+            window.alert("You are not in that room or it's a invalid roomname")
+            return
+         }
+         if(e === 6){
+            window.alert("Don't use that word")
+            return
+         }
+         if(e === 7){
+            window.alert("Duplicate Nickname!")
+            return
+         }
+         if(e === 8){
+            window.alert("Invalid Roomname!")
+            return
+         }
+         if(e===9){
+            window.alert("user does not exist")
+            return
+         }
+         if(e===10){
+            window.alert("no empty nickname!")
+            return
+         }
+         
+      })
+      //shows newly joined member to the chat
+      socketio.on("new_user_to_client", function(data) {
+         const userListDiv = document.getElementById("userlist")
+         while (userListDiv.firstChild) {
+            userListDiv.removeChild(userListDiv.firstChild);
+         }
+
+         userListDiv.appendChild(document.createTextNode('Users: '));
+         data['users'].forEach(user => {
+            userListDiv.appendChild(document.createTextNode(user + ', '));
+         })
+      })
+      //clears chat logs of the room
+      socketio.on("clear_room_to_client", (data) => {
+         const userListDiv = document.getElementById("userlist")
+         while (userListDiv.firstChild) {
+            userListDiv.removeChild(userListDiv.firstChild);
+         }
+         const chatLog = document.getElementById("chatlog")
+
+         while (chatLog.firstChild) {
+            chatLog.removeChild(chatLog.firstChild);
+         }
+      })
+      //submit new nickname
+      function submitNickname(){
+         let nickname = document.getElementById("nickname_input").value;
+         socketio.emit("nickname_to_server", {nickname:nickname});
+
+         document.getElementById("nickname_input").value = "";
+      }
+      //send message to the room
+      function sendMessage(){
+         let msg = document.getElementById("message_input").value;
+         socketio.emit("message_to_server", {message:msg});
+
+         document.getElementById("message_input").value = "";
+      }
+      //create new room
+      function createRoom(){
+        let room_name = document.getElementById("room_name").value;
+        let password = document.getElementById("room_password").value;
+        let isPrivate = true ? document.querySelector("#private").checked : false
+        let flagWords = document.getElementById("room_flagwords").value.split(',')
+
+        socketio.emit("join_room_to_server", {name:room_name, password:password, isPrivate:isPrivate, isNew:true, flagWords:flagWords});
+
+        document.getElementById("room_name").value = "";
+      }
+      //join new room
+      function joinRoom(name) {
+        
+         socketio.emit("join_room_to_server", {name: name, password:"", isPrivate:false, isNew:false})
+      }
+      //join private room
+      function joinPrivateRoom(){
+         let join_room_name = document.getElementById("join_room_name").value;
+         let join_password = document.getElementById("join_room_password").value;
+         socketio.emit("join_room_to_server", {name:join_room_name, password:join_password, isPrivate:true, isNew:false})
+      }
+      //send private message
+      function sendPrivateMessage(){
+         let user = document.getElementById("private_message_receiver").value
+         let message = document.getElementById("private_message").value
+         let room = document.getElementById("private_message_room").value
+         socketio.emit("send_private_message", {user:user, message:message, room:room})
+      }
+      //send private invitation to the user
+      function sendPrivateInvitation(){
+         let user = document.getElementById("private_invitation_receiver").value
+         let room = document.getElementById("private_invitation_room").value
+         socketio.emit("send_private_invitation", {user:user, room:room})
+      }
+      //ban or kick user
+      function moderateUser() {
+         let user_name = document.getElementById("admin_user_name").value;
+         let room_name = document.getElementById("admin_room_name").value;
+         let ban_user = false;
+         if(document.querySelector("#ban").checked) {
+            ban_user = true;
+         }
+
+         socketio.emit("user_admin_to_server", {user_name: user_name, room_name: room_name, ban_user: ban_user})
+      }
+      //show and hide chat
+      function showRoom() {
+         const x = document.getElementById("room");
+         if (x.style.display === "none") {
+            x.style.display = "block";
+         } else {
+            x.style.display = "none";
+         }
+      }
+      //show and hide commands
+      function showCommands() {
+         const x = document.getElementById("command_container")
+         if (x.style.display === "none") {
+            x.style.display = "block";
+         } else {
+            x.style.display = "none";
+         }
+      }
+      </script>
+      <script type="module">
+         import { createPicker } from 'https://unpkg.com/picmo@latest/dist/index.js'
+         import { createPopup } from 'https://unpkg.com/@picmo/popup-picker@latest/dist/index.js?module';
+
+         // // The picker must have a root element to insert itself into
+         // const rootElement = document.querySelector('#pickerContainer');
+
+         // // Create the picker
+         // const picker = createPicker({ rootElement });
+
+         const trigger = document.querySelector('#emojiButton');
+
+         const picker = createPopup({
+            emojiSize: '1rem',
+            emojisPerRow: 8
+         }, {
+         referenceElement: trigger,
+         triggerElement: trigger
+         });
+
+         trigger.addEventListener('click', () => {
+            picker.toggle()
+         })
+         // The picker emits an event when an emoji is selected. Do with it as you will!
+         picker.addEventListener('emoji:select', event => {
+            let msg = document.getElementById("message_input").value;
+            msg += event.emoji;
+            document.getElementById("message_input").value = msg
+            console.log('Emoji selected:', event.emoji);
+         });
+      </script>
+   </head>
+   <body>
+      <div>
+         <h2 id="nickname">n</h2>
+         <h2 id="joined_room_name">Room Joined: </h2>
+        
+         <input type="text" id="nickname_input">
+         <button onclick="submitNickname()">enter nickname</button>
+      </div>
+      
+    
+      <div id="invitation" class="inv">
+        
+       </div>
+       <button onclick="showCommands()">show/hide commands</button>
+       <div class="input-container" id="command_container">
+      <div>
+         <h2>Create Room</h2>
+         <label for="room_name">Room Name</label>
+         <input type="text" id="room_name">
+        
+         <label for="room_password">Room Password</label>
+         <input type="text" id="room_password">
+         <label for="room_flagwords">Room Ban Words (Separate them by comma(,))</label>
+         <input type="text" id="room_flagwords">
+         <input type="checkbox" name="private" id="private">
+         <label for="private">Make the room private</label>
+         <button onclick="createRoom()">Create Room</button>
+      </div>
+
+      <div>
+         <h2>Join Private Room</h2>
+         <label for="room_name">Private Room Name</label>
+         <input type="text" id="join_room_name">
+        
+         <label for="room_password">Private Room Password</label>
+         <input type="text" id="join_room_password">
+         <button onclick="joinPrivateRoom()">Join Private Room</button>
+      </div>
+      
+      <div>
+         <h2>Send Private Message</h2>
+         <label for="private_message_receiver">user</label>
+         <input type="text" id="private_message_receiver">
+         <label for="private_message_room">room</label>
+         <input type="text" id="private_message_room">
+         <label for="private_message">message</label>
+         <input type="text" id="private_message">
+         <button onclick="sendPrivateMessage()">Send Private Message</button>
+
+      </div>
+         <div>
+            <h2>Invite User to Chat</h2>
+            <label for="private_invitation_receiver">user</label>
+            <input type="text" id="private_invitation_receiver">
+            <label for="private_invitation_room">room</label>
+            <input type="text" id="private_invitation_room">
+            <button onclick="sendPrivateInvitation()">Send Private Invitation</button>
+         </div>
+      <div>
+         <h2>Admin</h2>
+         <label for="admin_user_name">User Name</label>
+         <input type="text" id="admin_user_name">
+         <label for="admin_room_name">Room Name</label>
+         <input type="text" id="admin_room_name">
+         <input type="checkbox" name="ban" id="ban">
+         <label for="private">Permanently Ban User?</label>
+         <button onclick="moderateUser()">Moderate User</button>
+      </div>
+   </div>
+
+      <h3>Room List:</h3>
+      <div id="roomlist"></div>
+      <div class="container">
+         <button onclick="showRoom()">show/hide room</button>
+         <div id=room>
+            <div id="userlist"></div>
+            <div id="chatlog"></div>
+            <div id="messContainer">
+               <input type="text" id="message_input">
+               <div id="pickerContainer"></div>
+               <button id="emojiButton">Emoji</button>
+               <button onclick="sendMessage()">send</button>
+            </div>
+         </div>
+
+      </div>
+      <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+      
+</html>
